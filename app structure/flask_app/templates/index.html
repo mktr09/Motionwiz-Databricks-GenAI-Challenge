@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trigger Databricks Job</title>
+</head>
+<body>
+    <h1>Enter Details to Trigger Databricks Job</h1>
+    <form method="post">
+        <label for="api_token">Databricks API Token:</label><br>
+        <input type="text" id="api_token" name="api_token" required><br><br>
+
+        <label for="directory_path">Directory Path:</label><br>
+        <input type="text" id="directory_path" name="directory_path" required><br><br>
+
+        <label for="max_tokens">Max Tokens:</label><br>
+        <input type="number" id="max_tokens" name="max_tokens" value="256"><br><br>
+
+        <input type="submit" value="Trigger Job">
+    </form>
+</body>
+</html>
