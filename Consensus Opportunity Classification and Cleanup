@@ -1,0 +1,139 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "application/vnd.databricks.v1+cell": {
+     "cellMetadata": {
+      "byteLimit": 2048000,
+      "rowLimit": 10000
+     },
+     "inputWidgets": {},
+     "nuid": "524c0baa-b811-4389-bb43-23ac2a8c4b8e",
+     "showTitle": false,
+     "tableResultSettingsMap": {},
+     "title": ""
+    }
+   },
+   "outputs": [],
+   "source": [
+    "from pyspark.sql import functions as F\n",
+    "from pyspark.sql.window import Window\n",
+    "\n",
+    "# Read the PR_Classification_Results table where all LLM Classification outputs are stored\n",
+    "df = spark.table(\"PR_Classification_Results\")\n",
+    "\n",
+    "# Task 1: Remove rows where COMPANY_NAME is blank/null or OPPORTUNITY_CLASSIFICATION is not any of the three choices\n",
+    "valid_opportunities = [\"Possible Opportunity\", \"Unlikely Opportunity\", \"Unknown Opportunity\"]\n",
+    "df_filtered = df.filter(\n",
+    "    (F.col(\"COMPANY_NAME\").isNotNull()) & \n",
+    "    (F.col(\"COMPANY_NAME\") != \"\") & \n",
+    "    (F.col(\"OPPORTUNITY_CLASSIFICATION\").isin(valid_opportunities))\n",
+    ")\n",
+    "\n",
+    "# Keep only the specified columns in the desired order\n",
+    "columns_to_keep = [\"MODEL\", \"FILE_NAME\", \"COMPANY_NAME\", \"OPPORTUNITY_CLASSIFICATION\", \"REASONING\", \"REPORT_DATE\"]\n",
+    "df_filtered = df_filtered.select(columns_to_keep)\n",
+    "\n",
+    "# Group by COMPANY_NAME and OPPORTUNITY_CLASSIFICATION and count the occurrences\n",
+    "df_classification_counts = df_filtered.groupBy(\"COMPANY_NAME\", \"OPPORTUNITY_CLASSIFICATION\").count()\n",
+    "\n",
+    "# Use window function to determine the opportunity with the most votes\n",
+    "window_spec = Window.partitionBy(\"COMPANY_NAME\").orderBy(F.desc(\"count\"))\n",
+    "df_with_rank = df_classification_counts.withColumn(\"rank\", F.row_number().over(window_spec))\n",
+    "\n",
+    "# Filter to keep only the top-ranked opportunity for each company\n",
+    "df_final_decision = df_with_rank.filter(F.col(\"rank\") == 1).select(\n",
+    "    \"COMPANY_NAME\", \n",
+    "    F.col(\"OPPORTUNITY_CLASSIFICATION\").alias(\"Final_Decision\")\n",
+    ")\n",
+    "\n",
+    "# Create keys for joining\n",
+    "df_filtered = df_filtered.withColumn(\"key\", F.concat_ws(\"_\", F.col(\"COMPANY_NAME\"), F.col(\"OPPORTUNITY_CLASSIFICATION\")))\n",
+    "df_final_decision = df_final_decision.withColumn(\"key\", F.concat_ws(\"_\", F.col(\"COMPANY_NAME\"), F.col(\"Final_Decision\")))\n",
+    "\n",
+    "# Use window function to get the first instance of FILE_NAME and REASONING for each key\n",
+    "window_spec_instance = Window.partitionBy(\"key\").orderBy(\"REPORT_DATE\")\n",
+    "df_filtered_with_instance = df_filtered.withColumn(\"row_number\", F.row_number().over(window_spec_instance)) \\\n",
+    "    .filter(F.col(\"row_number\") == 1) \\\n",
+    "    .drop(\"row_number\")\n",
+    "\n",
+    "# Join the final decision with the filtered DataFrame\n",
+    "df_final = df_final_decision.alias(\"final_decision\").join(\n",
+    "    df_filtered_with_instance.alias(\"filtered_instance\"),\n",
+    "    on=\"key\",\n",
+    "    how=\"inner\"\n",
+    ").select(\n",
+    "    \"filtered_instance.MODEL\", \n",
+    "    \"filtered_instance.FILE_NAME\", \n",
+    "    \"filtered_instance.COMPANY_NAME\", \n",
+    "    \"final_decision.Final_Decision\", \n",
+    "    \"filtered_instance.REASONING\", \n",
+    "    \"filtered_instance.REPORT_DATE\"\n",
+    ")\n",
+    "\n",
+    "# Filter to keep only rows classified as \"Possible Opportunity\"\n",
+    "df_possible_opportunity = df_final.filter(F.col(\"Final_Decision\") == \"Possible Opportunity\")\n",
+    "\n",
+    "# Use window function to keep only the first instance for each FILE_NAME\n",
+    "window_spec_file = Window.partitionBy(\"FILE_NAME\").orderBy(\"REPORT_DATE\")\n",
+    "df_first_instance = df_possible_opportunity.withColumn(\"row_number\", F.row_number().over(window_spec_file)) \\\n",
+    "    .filter(F.col(\"row_number\") == 1) \\\n",
+    "    .drop(\"row_number\")\n",
+    "\n",
+    "# Save the final DataFrame to a table for dashboarding\n",
+    "df_first_instance.write.mode(\"overwrite\").saveAsTable(\"Possible_Opportunities\")\n",
+    "\n",
+    "display(df_first_instance)"
+   ]
+  }
+ ],
+ "metadata": {
+  "application/vnd.databricks.v1+notebook": {
+   "dashboards": [],
+   "environmentMetadata": {
+    "base_environment": "",
+    "client": "1"
+   },
+   "language": "python",
+   "notebookMetadata": {
+    "pythonIndentUnit": 4
+   },
+   "notebookName": "PR_Classification_Results_Validation",
+   "widgets": {}
+  },
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.7"
+  },
+  "toc": {
+   "base_numbering": 1,
+   "nav_menu": {},
+   "number_sections": true,
+   "sideBar": true,
+   "skip_h1_title": false,
+   "title_cell": "Table of Contents",
+   "title_sidebar": "Contents",
+   "toc_cell": false,
+   "toc_position": {},
+   "toc_section_display": true,
+   "toc_window_display": false
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 1
+}

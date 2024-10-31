@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 app = Flask(__name__)
 
 # Databricks instance URL (without the trailing slash)
-DATABRICKS_INSTANCE = 'https://dbc-c29e64b6-6d6d.cloud.databricks.com'
+DATABRICKS_INSTANCE = 'your-databricks-instance-here'
 
 # Databricks Job ID
 JOB_ID = '190035253520278'

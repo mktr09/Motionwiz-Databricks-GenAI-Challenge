@@ -1,9 +1,9 @@
 import requests
 import json
 
-DATABRICKS_INSTANCE = 'https://dbc-c29e64b6-6d6d.cloud.databricks.com'
+DATABRICKS_INSTANCE = 'your-databricks-instance-here'
 
-API_TOKEN = 'dapi5630d01e9f1588146c981f0c8c1213cc'
+API_TOKEN = 'your-token-here'
 
 JOB_ID = '190035253520278'
 

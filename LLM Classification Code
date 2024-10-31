@@ -1,0 +1,340 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "application/vnd.databricks.v1+cell": {
+     "cellMetadata": {
+      "byteLimit": 2048000,
+      "rowLimit": 10000
+     },
+     "collapsed": true,
+     "inputWidgets": {},
+     "nuid": "583782af-5490-4e3c-895d-ca5cd1d818c8",
+     "showTitle": false,
+     "tableResultSettingsMap": {},
+     "title": ""
+    }
+   },
+   "outputs": [],
+   "source": [
+    "%pip install openai"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "application/vnd.databricks.v1+cell": {
+     "cellMetadata": {
+      "byteLimit": 2048000,
+      "rowLimit": 10000
+     },
+     "inputWidgets": {},
+     "nuid": "34d99e47-7843-41fc-81cf-2f1373051aa6",
+     "showTitle": false,
+     "tableResultSettingsMap": {},
+     "title": ""
+    }
+   },
+   "outputs": [],
+   "source": [
+    "%restart_python"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "application/vnd.databricks.v1+cell": {
+     "cellMetadata": {
+      "byteLimit": 2048000,
+      "rowLimit": 10000
+     },
+     "inputWidgets": {},
+     "nuid": "6ceba062-8386-418a-8c6b-3be191e86f76",
+     "showTitle": false,
+     "tableResultSettingsMap": {},
+     "title": ""
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# Add widgets to capture user inputs\n",
+    "dbutils.widgets.text(\"api_token\", \"\", \"Enter OpenAI API Token\")\n",
+    "dbutils.widgets.text(\"directory_path\", \"/Workspace/Users/marin.kutrolli@penske.com/Testing Iterative Approach for LLM Response\", \"Enter Directory Path\")\n",
+    "dbutils.widgets.dropdown(\"max_tokens\", \"256\", [\"128\", \"256\", \"512\"], \"Max Tokens\")\n",
+    "\n",
+    "# Retrieve the widget values\n",
+    "api_token = dbutils.widgets.get(\"api_token\")\n",
+    "directory_path = dbutils.widgets.get(\"directory_path\")\n",
+    "max_tokens = int(dbutils.widgets.get(\"max_tokens\"))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 0,
+   "metadata": {
+    "application/vnd.databricks.v1+cell": {
+     "cellMetadata": {
+      "byteLimit": 2048000,
+      "rowLimit": 10000
+     },
+     "inputWidgets": {},
+     "nuid": "7f61d4a4-6838-45a4-9d81-b4eb85df9dcb",
+     "showTitle": false,
+     "tableResultSettingsMap": {},
+     "title": ""
+    }
+   },
+   "outputs": [],
+   "source": [
+    "# Version 3.1\n",
+    "\n",
+    "import os\n",
+    "import pandas as pd\n",
+    "from openai import OpenAI\n",
+    "\n",
+    "# OpenAI client to call models\n",
+    "client = OpenAI(\n",
+    "    api_key=api_token,  # your personal access token\n",
+    "    base_url='https://dbc-c29e64b6-6d6d.cloud.databricks.com/serving-endpoints/'\n",
+    ")\n",
+    "\n",
+    "# Directory where press releases are located\n",
+    "directory_path = directory_path\n",
+    "\n",
+    "# Models chosen for testing\n",
+    "models = [\"databricks-meta-llama-3-1-70b-instruct\", \"databricks-dbrx-instruct\", \"databricks-meta-llama-3-1-405b-instruct\"]\n",
+    "\n",
+    "# Function to process a single press release through all 3 models\n",
+    "def process_file_through_models(file_path, models):\n",
+    "    with open(file_path, 'r') as file:\n",
+    "        user_content = file.read()\n",
+    "\n",
+    "    prompt = (\n",
+    "        \"Please review the press release below and try to determine whether there appears to be an opportunity to sell the company mentioned in the article additional trucks. \"\n",
+    "        \"Classify your answers as 'Possible Opportunity', 'Unlikely Opportunity', or 'Unknown Opportunity' only. Do not change the format or capitalization of the answer choices.\"\n",
+    "        \"Follow a table format for providing the answer and use only these columns: 'COMPANY_NAME', 'OPPORTUNITY_CLASSIFICATION', 'REASONING', 'REPORT_DATE'. Use 'YYYY-MM-DD' for 'REPORT DATE' format. \"\n",
+    "        \"**The response must strictly follow the table format.**\"\n",
+    "    )\n",
+    "\n",
+    "    user_content = prompt + user_content\n",
+    "\n",
+    "    messages = [\n",
+    "        {\"role\": \"system\", \"content\": \"You are a truck leasing analyst reading through press releases to determine if the listed company might have a use for additional vehicles. \"\n",
+    "        \"Provide only one classification for each text file analyzed.\"},\n",
+    "        {\"role\": \"user\", \"content\": user_content},\n",
+    "    ]\n",
+    "\n",
+    "    responses = {}\n",
+    "    for model_name in models:\n",
+    "        chat_completion = client.chat.completions.create(\n",
+    "            messages=messages,\n",
+    "            model=model_name,\n",
+    "            max_tokens=max_tokens,\n",
+    "            temperature= 0\n",
+    "        )\n",
+    "        responses[model_name] = chat_completion.choices[0].message.content\n",
+    "\n",
+    "    return responses\n",
+    "\n",
+    "# Convert response to DataFrame\n",
+    "def response_to_dataframe(response, model_name, file_name):\n",
+    "    lines = response.split('\\n')\n",
+    "    lines = [line for line in lines if not line.startswith('| ---')]\n",
+    "    data = [line.split('|') for line in lines if line.strip()]\n",
+    "    \n",
+    "    # Remove empty elements from each row\n",
+    "    data = [[element.strip() for element in row if element.strip()] for row in data]\n",
+    "    \n",
+    "    # Ensure the data has exactly 4 columns and then add \"MODEL\" and \"FILE_NAME\"\n",
+    "    if len(data) > 1 and len(data[0]) == 4:\n",
+    "        df = pd.DataFrame(data[1:], columns=data[0])\n",
+    "        df['MODEL'] = model_name\n",
+    "        df['FILE_NAME'] = file_name\n",
+    "        \n",
+    "        # Remove empty columns\n",
+    "        df = df.dropna(axis=1, how='all')\n",
+    "        \n",
+    "        # Reorder columns to place 'MODEL' and 'FILE_NAME' first\n",
+    "        cols = df.columns.tolist()\n",
+    "        cols.insert(0, cols.pop(cols.index('MODEL')))\n",
+    "        cols.insert(1, cols.pop(cols.index('FILE_NAME')))\n",
+    "        df = df[cols]\n",
+    "        \n",
+    "        return df\n",
+    "    else:\n",
+    "        # Handle cases where the data does not match the expected format\n",
+    "        return pd.DataFrame(columns=['MODEL', 'FILE_NAME', 'COMPANY_NAME', 'OPPORTUNITY_CLASSIFICATION', 'REASONING', 'REPORT_DATE'])\n",
+    "\n",
+    "# Initialize an empty list to store the combined data\n",
+    "all_data = []\n",
+    "\n",
+    "# Iterate over each text file in directory and subdirectories\n",
+    "for root, dirs, files in os.walk(directory_path):\n",
+    "    for filename in files:\n",
+    "        if filename.endswith(\".txt\"):\n",
+    "            file_path = os.path.join(root, filename)\n",
+    "            \n",
+    "            responses = process_file_through_models(file_path, models)\n",
+    "            \n",
+    "            # Convert responses to DataFrames and combine them\n",
+    "            for model_name, response in responses.items():\n",
+    "                df = response_to_dataframe(response, model_name, filename)\n",
+    "                if not df.empty:\n",
+    "                    all_data.append(df)\n",
+    "\n",
+    "# Ensure all_data is not empty before concatenating\n",
+    "if all_data:\n",
+    "    final_df = pd.concat(all_data, ignore_index=True)\n",
+    "    display(final_df)\n",
+    "\n",
+    "    # Create Spark dataframe\n",
+    "    final_spark_df = spark.createDataFrame(final_df)\n",
+    "\n",
+    "    # To build a table we can query/dashboard, we write the DataFrame to a Delta table\n",
+    "    final_spark_df.write.format(\"delta\").mode(\"overwrite\").option(\"mergeSchema\", \"true\").saveAsTable(\"PR_Classification_Results\")\n",
+    "else:\n",
+    "    print(\"No valid data to concatenate.\")"
+   ]
+  }
+ ],
+ "metadata": {
+  "application/vnd.databricks.v1+notebook": {
+   "dashboards": [],
+   "environmentMetadata": {
+    "base_environment": "",
+    "client": "1"
+   },
+   "language": "python",
+   "notebookMetadata": {
+    "pythonIndentUnit": 4
+   },
+   "notebookName": "Web App Version",
+   "widgets": {
+    "api_token": {
+     "currentValue": "",
+     "nuid": "8b221de7-e5a4-47fb-8fd0-96b259872884",
+     "typedWidgetInfo": {
+      "autoCreated": false,
+      "defaultValue": "",
+      "label": "Enter OpenAI API Token",
+      "name": "api_token",
+      "options": {
+       "validationRegex": null,
+       "widgetDisplayType": "Text"
+      },
+      "parameterDataType": "String"
+     },
+     "widgetInfo": {
+      "defaultValue": "",
+      "label": "Enter OpenAI API Token",
+      "name": "api_token",
+      "options": {
+       "autoCreated": null,
+       "validationRegex": null,
+       "widgetType": "text"
+      },
+      "widgetType": "text"
+     }
+    },
+    "directory_path": {
+     "currentValue": "/Workspace/Users/christopher.matt@penske.com/Press Releases",
+     "nuid": "48820f51-2796-4cab-aabb-484e9ae1e2d6",
+     "typedWidgetInfo": {
+      "autoCreated": false,
+      "defaultValue": "/Workspace/Users/marin.kutrolli@penske.com/Testing Iterative Approach for LLM Response",
+      "label": "Enter Directory Path",
+      "name": "directory_path",
+      "options": {
+       "validationRegex": null,
+       "widgetDisplayType": "Text"
+      },
+      "parameterDataType": "String"
+     },
+     "widgetInfo": {
+      "defaultValue": "/Workspace/Users/marin.kutrolli@penske.com/Testing Iterative Approach for LLM Response",
+      "label": "Enter Directory Path",
+      "name": "directory_path",
+      "options": {
+       "autoCreated": null,
+       "validationRegex": null,
+       "widgetType": "text"
+      },
+      "widgetType": "text"
+     }
+    },
+    "max_tokens": {
+     "currentValue": "256",
+     "nuid": "64a6aa90-d254-4f4a-a7c0-6359909c1843",
+     "typedWidgetInfo": {
+      "autoCreated": false,
+      "defaultValue": "256",
+      "label": "Max Tokens",
+      "name": "max_tokens",
+      "options": {
+       "choices": [
+        "128",
+        "256",
+        "512"
+       ],
+       "fixedDomain": true,
+       "multiselect": false,
+       "widgetDisplayType": "Dropdown"
+      },
+      "parameterDataType": "String"
+     },
+     "widgetInfo": {
+      "defaultValue": "256",
+      "label": "Max Tokens",
+      "name": "max_tokens",
+      "options": {
+       "autoCreated": null,
+       "choices": [
+        "128",
+        "256",
+        "512"
+       ],
+       "widgetType": "dropdown"
+      },
+      "widgetType": "dropdown"
+     }
+    }
+   }
+  },
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.7"
+  },
+  "toc": {
+   "base_numbering": 1,
+   "nav_menu": {},
+   "number_sections": true,
+   "sideBar": true,
+   "skip_h1_title": false,
+   "title_cell": "Table of Contents",
+   "title_sidebar": "Contents",
+   "toc_cell": false,
+   "toc_position": {},
+   "toc_section_display": true,
+   "toc_window_display": false
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 1
+}
