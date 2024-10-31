@@ -1,6 +1,8 @@
 # Motionwiz-Databricks-GenAI-Challenge
 Repository for APRA (Automated Press Release Analyst)
 
+### For information on business use case, costs, desging & challenges as well as next steps please read the project wiki! ###
+
 ## Running APRA's POC
 
 *LLM Classification Engine.py* contains the bulk of the code which utilizes LLM calling through Databricks Serving Endpoints.
