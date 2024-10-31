@@ -20,7 +20,7 @@ headers = {
 payload = {
     "job_id": JOB_ID,
     "notebook_params": {
-        "api_token": "dapi5630d01e9f1588146c981f0c8c1213cc",  # the actual API token
+        "api_token": "your-token-here",
         "directory_path": "/Workspace/Users/marin.kutrolli@penske.com/Testing Iterative Approach for LLM Response",
         "max_tokens": "256"
     }
