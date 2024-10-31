@@ -3,7 +3,7 @@ import json
 
 DATABRICKS_INSTANCE = 'your-databricks-instance-here'
 
-API_TOKEN = 'your-token-here'
+API_TOKEN = "placeholder_for_your_token"
 
 JOB_ID = '190035253520278'
 
@@ -20,7 +20,7 @@ headers = {
 payload = {
     "job_id": JOB_ID,
     "notebook_params": {
-        "api_token": "your-token-here",
+        "api_token": API_TOKEN
         "directory_path": "/Workspace/Users/marin.kutrolli@penske.com/Testing Iterative Approach for LLM Response",
         "max_tokens": "256"
     }
